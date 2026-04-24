@@ -8,13 +8,10 @@ use cs_table::bridson::{poisson_disc_bridson_2d, Point2};
 fn main() {
 
 
-    let width = 1.;
-    let height = 1.;
+    let width = 2.;
+    let height = 2.;
     let r = 0.003;
     let k = 30;
-    let scale = 512;
-
-    let std = 7.;
 
     let mut rng = rand::rng();
 
@@ -24,10 +21,16 @@ fn main() {
     let mut scatter = vec![];
 
     for point in points {
-        let x = point.x * 2. - 1.;
-        let y = point.y * 2. - 1.;
-        let [x,y] = poisson_to_generalized_gaussian_radial(x, y, 0.35, 3.0);
-        scatter.push(Complex::new(x, y));
+
+        let x = point.x - 1.;
+        let y = point.y - 1.;
+
+        let r = (x * x + y * y).sqrt();
+        if r < 1. {
+            let [x,y] = poisson_to_generalized_gaussian_radial(x, y, 0.35, 0.5);
+            scatter.push(Complex::new(x, y));
+        }
+
     }
 
     println!("num points: {}", scatter.len());
