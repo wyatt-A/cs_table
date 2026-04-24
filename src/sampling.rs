@@ -4,8 +4,7 @@ use itertools::{iproduct, Itertools};
 use ndarray::{Array, Array2, ShapeBuilder};
 use num_complex::{Complex32, ComplexFloat};
 use num_traits::{FloatConst, Zero};
-use rand::distributions::{Distribution, Uniform};
-use rand::SeedableRng;
+use rand::{RngExt, SeedableRng};
 use rayon::{prelude::*, vec};
 use core::num;
 use std::collections::HashSet;
@@ -13,8 +12,7 @@ use std::error::Error;
 use std::ops::Range;
 use dft_lib::common::{FftDirection, NormalizationType};
 use dft_lib::rs_fft::rs_fftn;
-
-
+use rand::distr::Uniform;
 
 ///CS table downsampling ... given a sampling pattern, find a lower-resolution sampling pattern
 ///that is a sub-set of the original. This does not evaluate peak interference when finding a
@@ -32,7 +30,7 @@ pub fn downsample_view_table(base_table:&ViewTable,target_nx:usize,target_ny:usi
 
     let pdf = gauss_pdf2(target_nx,target_ny,pa,pb);
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let range = Uniform::new(0.0, 1.0);
 
     let mut undersample_factor_lb = 0.;
@@ -54,7 +52,7 @@ pub fn downsample_view_table(base_table:&ViewTable,target_nx:usize,target_ny:usi
         for _ in 0..n {
             let (scaled_pdf,_) = scale_pdf(pdf.clone(),mid_comp_factor).unwrap();
             let msk = scaled_pdf.map(|x| {
-                if range.sample(&mut rng) < *x {
+                if rng.random_range(0.0..1.0) < *x {
                     true
                 } else {
                     false
@@ -112,7 +110,7 @@ pub fn gen_sampling(
 
     let mut min_sidelobe = f32::INFINITY;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let range = Uniform::new(0.0, 1.0);
 
     let mut best_sidelobe = vec![];
@@ -133,7 +131,7 @@ pub fn gen_sampling(
         let msk = loop {
             let mut total_samps = 0;
             let msk = scaled_pdf.map(|x| {
-                if range.sample(&mut rng) < *x {
+                if rng.random_range(0.0..1.0) < *x {
                     total_samps += 1;
                     // we set complex values so we can perform fft on them later
                     Complex32::new(1., 0.)
