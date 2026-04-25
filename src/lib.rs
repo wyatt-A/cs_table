@@ -12,6 +12,7 @@ use array_lib::io_cfl::write_cfl;
 pub mod cs_table;
 pub mod sampling;
 pub mod bridson;
+pub mod utils;
 
 /// type representing a lookup table for compressed phase encoding. By default, this is a list of 2-D
 /// coordinates specifying a cartesian phase encoding. For 2-D phase encoding, the second coordinate is 0.

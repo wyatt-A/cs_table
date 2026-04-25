@@ -2,37 +2,10 @@ use std::f32::consts::PI;
 use array_lib::ArrayDim;
 use array_lib::io_cfl::write_cfl;
 use array_lib::io_nifti::write_nifti;
-use num_complex::Complex;
+use num_complex::{Complex, ComplexFloat};
 use rand::Rng;
 use cs_table::bridson::{poisson_disc_bridson_2d, poisson_disc_bridson_3d, Point2};
-
-//r = linspace(0,1,1000);
-//
-// rc = 0.1;
-// rt = 0.8;
-// b  = 0.1;
-//
-// prob = zeros(size(r));
-//
-// for i = 1:length(r)
-//     ri = r(i);
-//
-//     if ri <= rc
-//         p = 1;
-//     elseif ri <= rt
-//         t = (ri - rc) / (rt - rc);   % normalize 0→1
-//
-//         % Quintic smoothstep (C2 continuous)
-//         s = t^3 * (t * (6*t - 15) + 10);
-//
-//         % invert so it goes from 1 → b
-//         p = (1 - b) * (1 - s) + b;
-//     else
-//         p = b;
-//     end
-//
-//     prob(i) = p;
-// end
+use cs_table::utils::{cumtrapz, interp1, trapz};
 
 fn main() {
 
@@ -40,17 +13,76 @@ fn main() {
     let mut rng = rand::rng();
     let points = poisson_disc_bridson_3d(1.,1.,1.,0.03,30,&mut rng);
 
-
-    let coords_dims = ArrayDim::from_shape(&[3,points.len()]);
-    let mut coords = vec![];
-
+    let mut x = vec![];
+    let mut y = vec![];
+    let mut z = vec![];
     for point in points {
-        coords.push(Complex::new(point.x,0.));
-        coords.push(Complex::new(point.y,0.));
-        coords.push(Complex::new(point.z,0.));
+
+        let xi = point.x * 2. - 1.;
+        let yi = point.y * 2. - 1.;
+        let zi = point.z * 2. - 1.;
+
+        let r = (xi.powi(2) + yi.powi(2)).sqrt();
+        if r < 1. {
+            x.push(xi);
+            y.push(yi);
+            z.push(zi);
+        }
+
     }
 
-    write_cfl("scatter3",&coords,coords_dims);
+    // background
+    let b = 0.0;
+    // transition
+    let rt = 1.;
+    // center rad
+    let rc = 0.1;
+
+    let n_cdf_samples = 1000;
+
+    let mut r = vec![];
+    let mut p = vec![];
+
+    (0..n_cdf_samples).for_each(|i| {
+        let ri = i as f32 / (n_cdf_samples as f32 - 1.);
+        r.push(ri);
+        p.push(radial_profile(ri,rc,rt,b))
+    });
+
+    // normalize probability
+    let integral = trapz(&r,&p);
+    p.iter_mut().for_each(|p| *p /= integral);
+
+    let mut cdf = vec![0.;n_cdf_samples];
+    cumtrapz(&r,&p,&mut cdf);
+
+    let mut icdf = vec![0.;x.len()];
+
+    let u = x.iter().zip(y.iter()).map(|(x,y)|{
+        x*x + y*y
+    }).collect::<Vec<_>>();
+
+    interp1(&cdf,&r,&u,&mut icdf);
+
+    // move the points
+    x.iter_mut().zip(y.iter_mut()).enumerate().for_each(|(i,(x,y))|{
+        let scale = icdf[i] / (x.powi(2) + y.powi(2)).sqrt();
+        *x *= scale;
+        *y *= scale;
+    });
+
+    let coords_dims = ArrayDim::from_shape(&[3,x.len()]);
+    let mut coords = vec![];
+
+    for i in 0..x.len() {
+        coords.push(x[i]);
+        coords.push(y[i]);
+        coords.push(z[i]);
+    }
+
+    write_nifti("scatter3",&coords,coords_dims);
+
+
 
 }
 
@@ -158,4 +190,27 @@ where
     let scale = rp / r;
 
     [x * scale, y * scale]
+}
+
+pub fn radial_profile(r: f32, rc: f32, rt: f32, b: f32) -> f32 {
+    assert!(rc >= 0.0 && rc < rt, "require 0 <= rc < rt");
+    assert!(rt <= 1.0, "rt should be <= 1 (assuming normalized radius)");
+    assert!(b >= 0.0 && b <= 1.0, "b should be in [0,1]");
+
+    // Optional: clamp r to [0,1] if that's your domain
+    let r = r.clamp(0.0, 1.0);
+
+    if r <= rc {
+        1.0
+    } else if r <= rt {
+        let t = (r - rc) / (rt - rc); // normalize 0→1
+
+        // Quintic smoothstep (C2 continuous)
+        let s = t * t * t * (t * (6.0 * t - 15.0) + 10.0);
+
+        // Map from 1 → b
+        (1.0 - b) * (1.0 - s) + b
+    } else {
+        b
+    }
 }
