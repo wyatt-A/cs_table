@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 civm_rust_utils = { git = "git+ssh://git@github.com:/wyatt-A/civm_rust_utils.git", branch = "main" }
-array-lib = { git = "https://git@github.com/wyatt-A/array-lib.git", features = ["io-cfl"] }
+array-lib = { git = "https://git@github.com/wyatt-A/array-lib.git", features = ["io-cfl","io-nifti"] }
 dft-lib = { git = "git+ssh://git@github.com:/wyatt-A/dft-lib.git" }
 clap = { version = "4.5.3", features = ["derive"] }
 itertools = "0.12.1"
