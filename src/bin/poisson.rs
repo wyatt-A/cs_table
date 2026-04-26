@@ -11,7 +11,7 @@ fn main() {
 
 
     let mut rng = rand::rng();
-    let points = poisson_disc_bridson_3d(1.,1.,1.,0.03,30,&mut rng);
+    let points = poisson_disc_bridson_3d(1.,1.,1.,0.01,30,&mut rng);
 
     let mut x = vec![];
     let mut y = vec![];
@@ -32,11 +32,11 @@ fn main() {
     }
 
     // background
-    let b = 0.0;
+    let b = 0.2;
     // transition
-    let rt = 1.;
+    let rt = 0.9;
     // center rad
-    let rc = 0.1;
+    let rc = 0.9;
 
     let n_cdf_samples = 1000;
 
@@ -71,18 +71,32 @@ fn main() {
         *y *= scale;
     });
 
-    let coords_dims = ArrayDim::from_shape(&[3,x.len()]);
-    let mut coords = vec![];
 
+    let scale = 128;
+    // scale by grid size
     for i in 0..x.len() {
-        coords.push(x[i]);
-        coords.push(y[i]);
-        coords.push(z[i]);
+        x[i] = (scale as f32 * x[i]).round();
+        y[i] = (scale as f32 * y[i]).round();
+        z[i] = (scale as f32 * z[i]).round();
     }
 
-    write_nifti("scatter3",&coords,coords_dims);
+    let grid_dims = ArrayDim::from_shape(&[2 * scale,2 * scale,2 * scale]);
+    let mut grid = grid_dims.alloc(0.);
 
+    for i in 0..x.len() {
+        let idx = [
+            x[i].round() as isize,
+            y[i].round() as isize,
+            z[i].round() as isize,
+        ];
+        let addr = grid_dims.calc_addr_signed(&idx);
+        grid[addr] = 1.;
+    }
 
+    let mut shifted = grid_dims.alloc(0.);
+    grid_dims.fftshift(&grid,&mut shifted,true);
+
+    write_nifti("samples",&shifted,grid_dims);
 
 }
 
