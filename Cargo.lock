@@ -103,11 +103,12 @@ dependencies = [
 [[package]]
 name = "array-lib"
 version = "0.1.0"
-source = "git+https://git@github.com/wyatt-A/array-lib.git#493ab122996459c7a95b807bc2286d992cf7ee5c"
+source = "git+ssh://git@github.com/wyatt-A/array-lib.git#ae0e46ef703654576ef5d9027a446e39b9c0bcb9"
 dependencies = [
  "bytemuck",
  "cfl",
  "clap",
+ "memmap2",
  "ndarray 0.16.1",
  "nifti",
  "num-complex",
@@ -738,6 +739,15 @@ checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -1556,7 +1566,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
