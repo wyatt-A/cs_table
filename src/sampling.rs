@@ -10,79 +10,80 @@ use core::num;
 use std::collections::HashSet;
 use std::error::Error;
 use std::ops::Range;
+use array_lib::ArrayDim;
 use dft_lib::common::{FftDirection, NormalizationType};
 use dft_lib::rs_fft::rs_fftn;
 use rand::distr::Uniform;
 
-///CS table downsampling ... given a sampling pattern, find a lower-resolution sampling pattern
-///that is a sub-set of the original. This does not evaluate peak interference when finding a
-///solution!
-pub fn downsample_view_table(base_table:&ViewTable,target_nx:usize,target_ny:usize,pa:f64,pb:f64,sample_rate:f64) -> Option<ViewTable> {
-    
-    let sample_mask = base_table.clone().to_mask(target_nx, target_ny);
-
-    let target_samples = ((target_nx*target_ny) as f64 * sample_rate).round();
-
-    if base_table.n_coord_pairs() < target_samples as usize {
-        println!("the number of target samples {} cannot be greater than the number of reference samples {}",target_samples,base_table.n_coord_pairs());
-        return None
-    }
-
-    let pdf = gauss_pdf2(target_nx,target_ny,pa,pb);
-
-    let mut rng = rand::rng();
-    let range = Uniform::new(0.0, 1.0);
-
-    let mut undersample_factor_lb = 0.;
-    let mut undersample_factor_ub = 1.;
-
-    let max_loop_count = 1000;
-
-    let mut loop_counter = 0;
-    loop {
-
-        if loop_counter == max_loop_count {
-            return None
-        }
-
-        let mut mean_err = 0;
-        let n = 100;
-    
-        let mid_comp_factor = (undersample_factor_lb + undersample_factor_ub)/2.;
-        for _ in 0..n {
-            let (scaled_pdf,_) = scale_pdf(pdf.clone(),mid_comp_factor).unwrap();
-            let msk = scaled_pdf.map(|x| {
-                if rng.random_range(0.0..1.0) < *x {
-                    true
-                } else {
-                    false
-                }
-            });
-            let t = &msk & &sample_mask;
-            let total_samps = t.iter().fold(0, |acc, x| if *x {acc + 1} else {acc});
-            let err = total_samps - target_samples as i32;
-
-            if err == 0 {
-                return Some(ViewTable::from_mask(t))
-            }
-
-            mean_err += err
-        };
-        mean_err /= n;
-    
-        
-        if mean_err > 0 { // too many samples
-            undersample_factor_ub = mid_comp_factor;
-        }else { // too few samples
-            undersample_factor_lb = mid_comp_factor;
-        }
-    
-        println!("mean sample err = {}",mean_err);
-
-        loop_counter += 1;
-    }
-
-}
+// ///CS table downsampling ... given a sampling pattern, find a lower-resolution sampling pattern
+// ///that is a sub-set of the original. This does not evaluate peak interference when finding a
+// ///solution!
+// pub fn downsample_view_table(base_table:&ViewTable,target_nx:usize,target_ny:usize,pa:f64,pb:f64,sample_rate:f64) -> Option<ViewTable> {
+//
+//     let sample_mask = base_table.clone().to_mask(target_nx, target_ny);
+//
+//     let target_samples = ((target_nx*target_ny) as f64 * sample_rate).round();
+//
+//     if base_table.n_coord_pairs() < target_samples as usize {
+//         println!("the number of target samples {} cannot be greater than the number of reference samples {}",target_samples,base_table.n_coord_pairs());
+//         return None
+//     }
+//
+//     let pdf = gauss_pdf2(target_nx,target_ny,pa,pb);
+//
+//     let mut rng = rand::rng();
+//     let range = Uniform::new(0.0, 1.0);
+//
+//     let mut undersample_factor_lb = 0.;
+//     let mut undersample_factor_ub = 1.;
+//
+//     let max_loop_count = 1000;
+//
+//     let mut loop_counter = 0;
+//     loop {
+//
+//         if loop_counter == max_loop_count {
+//             return None
+//         }
+//
+//         let mut mean_err = 0;
+//         let n = 100;
+//
+//         let mid_comp_factor = (undersample_factor_lb + undersample_factor_ub)/2.;
+//         for _ in 0..n {
+//             let (scaled_pdf,_) = scale_pdf(&pdf,&[target_nx,target_ny],mid_comp_factor).unwrap();
+//             let msk = scaled_pdf.map(|x| {
+//                 if rng.random_range(0.0..1.0) < *x {
+//                     true
+//                 } else {
+//                     false
+//                 }
+//             });
+//             let t = &msk & &sample_mask;
+//             let total_samps = t.iter().fold(0, |acc, x| if *x {acc + 1} else {acc});
+//             let err = total_samps - target_samples as i32;
+//
+//             if err == 0 {
+//                 return Some(ViewTable::from_mask(t))
+//             }
+//
+//             mean_err += err
+//         };
+//         mean_err /= n;
+//
+//
+//         if mean_err > 0 { // too many samples
+//             undersample_factor_ub = mid_comp_factor;
+//         }else { // too few samples
+//             undersample_factor_lb = mid_comp_factor;
+//         }
+//
+//         println!("mean sample err = {}",mean_err);
+//
+//         loop_counter += 1;
+//     }
+//
+// }
 
 /*
     PDF Generation for CS Sampling
@@ -101,12 +102,12 @@ pub fn gen_sampling(
     undersample_frac: f64,
     tolerance: usize,
     num_iter: usize,
-) -> Array2<bool> {
+) -> Vec<bool> {
     let raw_pdf = gauss_pdf2(nx, ny, pa, pb);
-    let (scaled_pdf, target_samples) = scale_pdf(raw_pdf, undersample_frac).unwrap();
+    let (scaled_pdf, target_samples) = scale_pdf(&raw_pdf, &[nx,ny] ,undersample_frac).unwrap();
 
     // f32 version of scale for repeated calls
-    let scale = scaled_pdf.map(|x| *x as f32);
+    let scale:Vec<f32> = scaled_pdf.iter().map(|x| *x as f32).collect();
 
     let mut min_sidelobe = f32::INFINITY;
 
@@ -130,7 +131,7 @@ pub fn gen_sampling(
         // random sampling / tolerance loop
         let msk = loop {
             let mut total_samps = 0;
-            let msk = scaled_pdf.map(|x| {
+            let msk:Vec<Complex32> = scaled_pdf.iter().map(|x| {
                 if rng.random_range(0.0..1.0) < *x {
                     total_samps += 1;
                     // we set complex values so we can perform fft on them later
@@ -138,7 +139,7 @@ pub fn gen_sampling(
                 } else {
                     Complex32::new(0., 0.)
                 }
-            });
+            }).collect();
             // if total samples is within tolerance, return the mask to the for-loop
             if (total_samps - target_samples as i32).abs() as usize <= tolerance {
                 break msk;
@@ -146,15 +147,15 @@ pub fn gen_sampling(
         };
 
         // scale the mask such that less-probable samples have higher intensity
-        let mut scaled_msk = (&msk / &scale).into_dyn();
+        let mut scaled_msk:Vec<Complex32> = msk.iter().zip(scale.iter()).map(|(x,s)| x / s).collect();
+        //let mut scaled_msk = (&msk / &scale).into_dyn();
 
-        rs_fftn(scaled_msk.as_slice_memory_order_mut().unwrap(),&[nx,ny],FftDirection::Inverse,NormalizationType::Unitary);
+        rs_fftn(&mut scaled_msk,&[nx,ny],FftDirection::Inverse,NormalizationType::Unitary);
 
         // retrieve the max side-lobe value
-        let mut abs = scaled_msk.map(|x| x.abs());
-        let f = abs.as_slice_memory_order_mut().unwrap();
-        f[0] = 0.;
-        let m = *f.iter().max_by(|a, b| a.partial_cmp(&b).unwrap()).unwrap();
+        let mut abs:Vec<f32> = scaled_msk.iter().map(|x| x.abs()).collect();
+        abs[0] = 0.;
+        let m = *abs.iter().max_by(|a, b| a.partial_cmp(&b).unwrap()).unwrap();
 
         // check if result is better than the last
         if m < min_sidelobe {
@@ -170,7 +171,7 @@ pub fn gen_sampling(
     println!("side lobes: {:?}", best_sidelobe);
     let best = best_mask.pop().unwrap();
     // map from complex to bool
-    best.map(|x| !x.is_zero())
+    best.iter().map(|x| !x.is_zero()).collect()
 }
 
 #[derive(Debug)]
@@ -181,21 +182,25 @@ enum PdfScaleError {
 }
 
 fn scale_pdf(
-    pdf: Array2<f64>,
+    pdf: &[f64],
+    shape:&[usize;2],
     undersample_frac: f64,
-) -> Result<(Array2<f64>, usize), PdfScaleError> {
+) -> Result<(Vec<f64>, usize), PdfScaleError> {
+
+    assert_eq!(shape.iter().product::<usize>(), pdf.len());
+
     if undersample_frac > 1. {
         return Err(PdfScaleError::InvalidUnderSampleFrac(undersample_frac));
     }
 
-    let grid_size: usize = pdf.shape().iter().product();
+    let grid_size: usize = shape.iter().product();
 
     // target samples represents the target energy of the pdf
     let target_samples = (grid_size as f64 * undersample_frac).round();
 
     //println!("target samples = {}", target_samples);
     // the goal is to have the sum of the pdf be equal to target_samples
-    let mut s = pdf.sum();
+    let mut s = pdf.iter().sum::<f64>();
 
     if s > target_samples as f64 {
         return Err(PdfScaleError::TargetSamplesTooLow(target_samples, s));
@@ -217,7 +222,7 @@ fn scale_pdf(
         offset_mid = (offset_lb + offset_hb) / 2.0;
 
         // set values above 1 to 1
-        s = (pdf.clone() + offset_mid).map(|x| x.min(1.)).sum();
+        s = pdf.iter().map(|x| x + offset_mid).map(|x| x.min(1.)).sum::<f64>();
 
         if s < target_samples {
             offset_lb = offset_mid;
@@ -227,14 +232,10 @@ fn scale_pdf(
         iter_count += 1;
     }
 
-    let scaled_pdf = (pdf + offset_mid).map(|x| x.min(1.));
-    let s = scaled_pdf.sum();
 
-    // println!(
-    //     "solution found in {} iterations with error {:0.2e} samples",
-    //     iter_count,
-    //     (s - target_samples).abs()
-    // );
+    let scaled_pdf:Vec<f64> = pdf.into_iter().map(|x| x + offset_mid).map(|x| x.min(1.)).collect();
+    //let s = scaled_pdf.iter().sum::<f64>();
+
     Ok((scaled_pdf, target_samples as usize))
 }
 
@@ -275,14 +276,24 @@ where
 
 /// generates an un-normalized 2D gaussian curved with shape paramters pa and pb on a grid
 /// of size nx by ny
-fn gauss_pdf2(nx: usize, ny: usize, pa: f64, pb: f64) -> Array2<f64> {
+fn gauss_pdf2(nx: usize, ny: usize, pa: f64, pb: f64) -> Vec<f64> {
     let pdf_x = |x: f64| (-(pb * x / nx as f64).powf(pa)).exp().sqrt();
     let pdf_y = |y: f64| (-(pb * y / ny as f64).powf(pa)).exp().sqrt();
 
-    let (x, y) = grid2::<f64>(nx, ny);
-    let r = (x.map(|x| x.powi(2)) + y.map(|y| y.powi(2))).map(|rsq| rsq.sqrt());
+    let dims = ArrayDim::from_shape(&[nx,ny]);
 
-    r.map(|r| pdf_x(*r)) * r.map(|r| pdf_y(*r))
+    let mut pdf = dims.alloc(0f64);
+
+    pdf.iter_mut().enumerate().for_each(|(i,p)|{
+        let [ix,iy,..] = dims.calc_idx_centered(i);
+        *p = pdf_x(ix.abs() as f64) * pdf_y(iy.abs() as f64);
+    });
+    pdf
+
+    // let (x, y) = grid2::<f64>(nx, ny);
+    // let r = (x.map(|x| x.powi(2)) + y.map(|y| y.powi(2))).map(|rsq| rsq.sqrt());
+    //
+    // r.map(|r| pdf_x(*r)) * r.map(|r| pdf_y(*r))
 }
 
 fn pdf(r: f32, nx: usize, ny: usize, a: f32, b: f32) -> f32 {

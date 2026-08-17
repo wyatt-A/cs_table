@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use cs_table::sampling::downsample_view_table;
 use cs_table::sampling::gen_sampling;
 use cs_table::sampling::grid2;
 use cs_table::ViewTable;
@@ -77,12 +76,12 @@ fn main() {
         pa:             {}
         ",
             nx,ny,sample_frac,pa,pb);
-
-        downsample_view_table(&p, nx, ny, pa, pb, sample_frac)
-            .expect("failed to find table with current settings")
+        todo!()
+        //downsample_view_table(&p, nx, ny, pa, pb, sample_frac)
+            //.expect("failed to find table with current settings")
 
     } else {
-        println!("running cs-table-gen with paramters:
+        println!("running cs-table-gen with parameters:
         nx:             {}
         ny:             {}
         undersampling:  {}
